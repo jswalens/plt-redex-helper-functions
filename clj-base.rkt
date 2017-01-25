@@ -21,8 +21,10 @@
      x
      (fn [x ...] e))
   (e ::= v
-     (+ e e) ; Note: we only have +, other operations are similar.
-     ; TODO: add some other basic operations next to +
+     (+ e ...)
+     (- e ...)
+     (= e ...)
+     (not e)
      (e e ...)
      (if e e e)
      (let [(x e) ...] e) ; Note: not as in Clojure
@@ -31,8 +33,10 @@
   
   (P ::= E)
   (E ::= hole
-     (+ E e)
-     (+ v E)
+     (+ v ... E e ...)
+     (- v ... E e ...)
+     (= v ... E e ...)
+     (not E)
      (v ... E e ...)
      (if E e e)
      (let [(x E) (x e) ...] e)
@@ -44,6 +48,8 @@
     (test-equal (redex-match? l p t) #t))
 
   ; Some example programs.
+  (define example-sum
+    (term (+ 1 2)))
   (define example-double
     (term (fn [x] (+ x x))))
   (define example-doubling
@@ -97,6 +103,19 @@
    (--> (in-hole P (+ number ...))
         (in-hole P ,(apply + (term (number ...))))
         "+")
+   (--> (in-hole P (- number ...))
+        (in-hole P ,(apply - (term (number ...))))
+        "-")
+   (--> (in-hole P (= v_1 v_2))
+        (in-hole P bool)
+        (where bool ,(if (eq? (term v_1) (term v_2)) (term true) (term false)))
+        "=")
+   (--> (in-hole P (not true))
+        (in-hole P false)
+        "not_true")
+   (--> (in-hole P (not false))
+        (in-hole P true)
+        "not_false")
    (--> (in-hole P ((fn [x_1 ..._n] e) v_1 ..._n))
         (in-hole P (subst [(v_1 x_1) ...] e))
         "β: function application")
@@ -118,9 +137,20 @@
 
 (module+ test
   ; Test ->b
+  (test-->> ->b example-sum (term 3))
   #;(traces ->b example-doubling)
   (test-->> ->b example-doubling (term 4))
   (test-->> ->b example-sum-3 (term 6))
+  (test-->> ->b (term (+ 1 4 3 2)) (term 10))
+  (test-->> ->b (term (- 4 3)) (term 1))
+  (test-->> ->b (term (- 2 10)) (term -8))
+  (test-->> ->b (term (= 1 1)) (term true))
+  (test-->> ->b (term (= 1 2)) (term false))
+  (test-->> ->b (term (= "abc" "abc")) (term true))
+  (test-->> ->b (term (= "abc" 1)) (term false))
+  (test-->> ->b (term (not true)) (term false))
+  (test-->> ->b (term (not false)) (term true))
+  (test-->> ->b (term (not (= "abc" 1))) (term true))
   #;(traces ->b example-base-language)
   (test-->> ->b example-base-language (term 9)))
 
